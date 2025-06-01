@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat App</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Arial', sans-serif; }
+        body { 
+            min-height: 100vh; 
+            background: linear-gradient(135deg, #e0c3fc, #8ec5fc); 
+            transition: background 0.3s, color 0.3s; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            padding: 20px; 
+        }
+        body.dark {
+            background: linear-gradient(135deg, #2e1a47, #4a3b7b);
+            color: #e0e0e0;
+        }
+        .container { 
+            display: flex; 
+            width: 100%; 
+            max-width: 1200px; 
+            height: 80vh; 
+            background: rgba(255, 255, 255, 0.9); 
+            border-radius: 15px; 
+            overflow: hidden; 
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); 
+            transition: background 0.3s; 
+        }
+        body.dark .container { background: rgba(40, 40, 60, 0.9); }
+        
+        /* Sidebar */
+        .sidebar { 
+            width: 250px; 
+            background: rgba(255, 255, 255, 0.95); 
+            padding: 20px; 
+            border-right: 1px solid #e0e0e0; 
+            overflow-y: auto; 
+        }
+        body.dark .sidebar { 
+            background: rgba(50, 50, 70, 0.95); 
+            border-right: 1px solid #444; 
+        }
+        .sidebar h3 { 
+            font-size: 18px; 
+            margin-bottom: 20px; 
+            color: #333; 
+        }
+        body.dark .sidebar h3 { color: #e0e0e0; }
+        .sidebar input { 
+            width: 100%; 
+            padding: 10px; 
+            margin-bottom: 20px; 
+            border: 1px solid #ccc; 
+            border-radius: 5px; 
+            outline: none; 
+        }
+        body.dark .sidebar input { 
+            background: #444; 
+            border-color: #555; 
+            color: #e0e0e0; 
+        }
+        .sidebar button { 
+            width: 100%; 
+            padding: 10px; 
+            margin-bottom: 10px; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            transition: background 0.3s; 
+        }
+        .sidebar button:first-of-type { background: #8a4af3; color: white; }
+        .sidebar button:last-of-type { background: #f3a84a; color: white; }
+        .sidebar button:hover { opacity: 0.9; }
+        body.dark .sidebar button { background: #6b3cc9; }
+        body.dark .sidebar button:last-of-type { background: #d88c3b; }
+
+        /* Main Chat Area */
+        .main { 
+            flex: 1; 
+            display: flex; 
+            flex-direction: column; 
+        }
+        #homepage, #chatroom { 
+            flex: 1; 
+            display: flex; 
+            flex-direction: column; 
+        }
+        #homepage { display: flex; }
+        #chatroom { display: none; }
+        .chat-header { 
+            padding: 15px 20px; 
+            border-bottom: 1px solid #e0e0e0; 
+            background: rgba(255, 255, 255, 0.95); 
+        }
+        body.dark .chat-header { 
+            background: rgba(50, 50, 70, 0.95); 
+            border-bottom: 1px solid #444; 
+        }
+        .chat-header h2 { font-size: 18px; color: #333; }
+        body.dark .chat-header h2 { color: #e0e0e0; }
+        #messages { 
+            flex: 1; 
+            padding: 20px; 
+            overflow-y: auto; 
+            background: rgba(255, 255, 255, 0.9); 
+        }
+        body.dark #messages { background: rgba(40, 40, 60, 0.9); }
+        #messages div { 
+            margin-bottom: 10px; 
+            padding: 10px; 
+            border-radius: 10px; 
+            max-width: 70%; 
+            word-wrap: break-word; 
+        }
+        #messages .message { 
+            background: #e0c3fc; 
+            margin-left: auto; 
+            text-align: right; 
+        }
+        #messages .notification { 
+            color: #888; 
+            text-align: center; 
+            background: none; 
+        }
+        body.dark #messages .message { background: #6b3cc9; }
+        .chat-input { 
+            padding: 15px 20px; 
+            border-top: 1px solid #e0e0e0; 
+            background: rgba(255, 255, 255, 0.95); 
+            display: flex; 
+            gap: 10px; 
+        }
+        body.dark .chat-input { 
+            background: rgba(50, 50, 70, 0.95); 
+            border-top: 1px solid #444; 
+        }
+        .chat-input input { 
+            flex: 1; 
+            padding: 10px; 
+            border: 1px solid #ccc; 
+            border-radius: 5px; 
+            outline: none; 
+        }
+        body.dark .chat-input input { 
+            background: #444; 
+            border-color: #555; 
+            color: #e0e0e0; 
+        }
+        .chat-input button { 
+            padding: 10px 20px; 
+            background: #8a4af3; 
+            color: white; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer; 
+        }
+        body.dark .chat-input button { background: #6b3cc9; }
+        .chat-input button:hover { opacity: 0.9; }
+
+        /* Right Panel */
+        .right-panel { 
+            width: 250px; 
+            background: rgba(255, 255, 255, 0.95); 
+            padding: 20px; 
+            border-left: 1px solid #e0e0e0; 
+        }
+        body.dark .right-panel { 
+            background: rgba(50, 50, 70, 0.95); 
+            border-left: 1px solid #444; 
+        }
+        .right-panel h3 { 
+            font-size: 16px; 
+            margin-bottom: 15px; 
+            color: #333; 
+        }
+        body.dark .right-panel h3 { color: #e0e0e0; }
+        .right-panel ul { list-style: none; }
+        .right-panel ul li { 
+            padding: 5px 0; 
+            color: #555; 
+        }
+        body.dark .right-panel ul li { color: #bbb; }
+
+        /* Join Form */
+        #joinForm { 
+            display: none; 
+            margin-top: 10px; 
+        }
+        #joinForm input { 
+            width: 100%; 
+            padding: 10px; 
+            margin-bottom: 10px; 
+            border: 1px solid #ccc; 
+            border-radius: 5px; 
+            outline: none; 
+        }
+        body.dark #joinForm input { 
+            background: #444; 
+            border-color: #555; 
+            color: #e0e0e0; 
+        }
+        #joinForm button { 
+            background: #f3a84a; 
+            color: white; 
+        }
+        body.dark #joinForm button { background: #d88c3b; }
+
+        /* Day/Night Toggle */
+        .toggle-container { 
+            position: fixed; 
+            top: 20px; 
+            right: 20px; 
+        }
+        #themeToggle { 
+            padding: 8px 16px; 
+            background: #8a4af3; 
+            color: white; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer; 
+        }
+        body.dark #themeToggle { background: #6b3cc9; }
+        #themeToggle:hover { opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <div class="toggle-container">
+        <button id="themeToggle">Night Mode</button>
+    </div>
+    <div class="container">
+        <div class="sidebar">
+            <h3>Welcome to Chat App</h3>
+            <input type="text" id="nickname" placeholder="Enter your nickname">
+            <button id="createRoom">Create Room</button>
+            <button id="joinRoom">Join Room</button>
+            <div id="joinForm">
+                <input type="text" id="roomCode" placeholder="Enter 8-digit room code">
+                <button id="join">Join</button>
+            </div>
+        </div>
+        <div class="main">
+            <div id="homepage"></div>
+            <div id="chatroom">
+                <div class="chat-header">
+                    <h2>Room: <span id="roomCodeDisplay"></span></h2>
+                </div>
+                <div id="messages"></div>
+                <div class="chat-input">
+                    <input type="text" id="message" placeholder="Type a message">
+                    <button id="send">Send</button>
+                </div>
+            </div>
+        </div>
+        <div class="right-panel">
+            <h3>Users</h3>
+            <ul id="userList"></ul>
+        </div>
+    </div>
+    <script>
+        const socket = io();
+        const body = document.body;
+        const themeToggle = document.getElementById('themeToggle');
+
+        // Day/Night Modeト mode toggle
+        themeToggle.addEventListener('click', () => {
+            body.classList.toggle('dark');
+            themeToggle.textContent = body.classList.contains('dark') ? 'Day Mode' : 'Night Mode';
+        });
+
+        // Create Room
+        document.getElementById('createRoom').addEventListener('click', () => {
+            const nickname = document.getElementById('nickname').value.trim();
+            if (nickname) socket.emit('create_room', { nickname });
+            else alert('Please enter a nickname');
+        });
+
+        // Show join form
+        document.getElementById('joinRoom').addEventListener('click', () => {
+            document.getElementById('joinForm').style.display = 'block';
+        });
+
+        // Join Room
+        document.getElementById('join').addEventListener('click', () => {
+            const nickname = document.getElementById('nickname').value.trim();
+            const roomCode = document.getElementById('roomCode').value.trim();
+            if (nickname && roomCode) socket.emit('join_room', { nickname, room_code: roomCode });
+            else alert('Please enter nickname and room code');
+        });
+
+        // Enter chat room
+        function enterRoom(roomCode) {
+            document.getElementById('homepage').style.display = 'none';
+            document.getElementById('chatroom').style.display = 'flex';
+            document.getElementById('roomCodeDisplay').textContent = roomCode;
+        }
+
+        socket.on('room_created', (data) => enterRoom(data.room_code));
+        socket.on('room_joined', (data) => enterRoom(data.room_code));
+        socket.on('error', (data) => alert(data.message));
+
+        // Send message
+        document.getElementById('send').addEventListener('click', () => {
+            const message = document.getElementById('message').value.trim();
+            if (message) {
+                socket.emit('send_message', { message });
+                document.getElementById('message').value = '';
+            }
+        });
+
+        // Receive message
+        socket.on('new_message', (data) => {
+            const messagesDiv = document.getElementById('messages');
+            const msg = document.createElement('div');
+            msg.className = 'message';
+            msg.textContent = `${data.nickname}: ${data.message}`;
+            messagesDiv.appendChild(msg);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        });
+
+        // User join/leave notifications
+        socket.on('user_joined', (data) => {
+            const messagesDiv = document.getElementById('messages');
+            const msg = document.createElement('div');
+            msg.className = 'notification';
+            msg.textContent = `${data.nickname} has joined the room`;
+            messagesDiv.appendChild(msg);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        });
+
+        socket.on('user_left', (data) => {
+            const messagesDiv = document.getElementById('messages');
+            const msg = document.createElement('div');
+            msg.className = 'notification';
+            msg.textContent = `${data.nickname} has left the room`;
+            messagesDiv.appendChild(msg);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        });
+
+        // Update user list
+        socket.on('user_list', (data) => {
+            const userList = document.getElementById('userList');
+            userList.innerHTML = '';
+            data.users.forEach(user => {
+                const li = document.createElement('li');
+                li.textContent = user;
+                userList.appendChild(li);
+            });
+        });
+    </script>
+</body>
+</html>
