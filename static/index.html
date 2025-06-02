@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Chat App</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <title>Real-time Chat App</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/supabase/2.38.0/supabase.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Arial', sans-serif; }
         body { 
@@ -31,7 +31,6 @@
         }
         body.dark .container { background: rgba(40, 40, 60, 0.9); }
         
-        /* Sidebar */
         .sidebar { 
             width: 250px; 
             background: rgba(255, 255, 255, 0.95); 
@@ -78,7 +77,6 @@
         body.dark .sidebar button { background: #6b3cc9; }
         body.dark .sidebar button:last-of-type { background: #d88c3b; }
 
-        /* Main Chat Area */
         .main { 
             flex: 1; 
             display: flex; 
@@ -89,7 +87,13 @@
             display: flex; 
             flex-direction: column; 
         }
-        #homepage { display: flex; }
+        #homepage { 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            text-align: center; 
+            padding: 40px; 
+        }
         #chatroom { display: none; }
         .chat-header { 
             padding: 15px 20px; 
@@ -100,8 +104,10 @@
             background: rgba(50, 50, 70, 0.95); 
             border-bottom: 1px solid #444; 
         }
-        .chat-header h2 { font-size: 18px; color: #333; }
+        .chat-header h2 { font-size: 18px; color: #333; margin-bottom: 5px; }
         body.dark .chat-header h2 { color: #e0e0e0; }
+        .chat-header small { color: #666; }
+        body.dark .chat-header small { color: #bbb; }
         #messages { 
             flex: 1; 
             padding: 20px; 
@@ -115,18 +121,33 @@
             border-radius: 10px; 
             max-width: 70%; 
             word-wrap: break-word; 
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         #messages .message { 
             background: #e0c3fc; 
             margin-left: auto; 
             text-align: right; 
         }
+        #messages .other-message { 
+            background: #f0f0f0; 
+            margin-right: auto; 
+            text-align: left; 
+        }
+        body.dark #messages .other-message { background: #555; }
         #messages .notification { 
             color: #888; 
             text-align: center; 
-            background: none; 
+            background: rgba(0,0,0,0.05); 
+            margin: 5px auto;
+            font-style: italic;
+            font-size: 14px;
         }
         body.dark #messages .message { background: #6b3cc9; }
+        body.dark #messages .notification { background: rgba(255,255,255,0.1); }
         .chat-input { 
             padding: 15px 20px; 
             border-top: 1px solid #e0e0e0; 
@@ -160,8 +181,11 @@
         }
         body.dark .chat-input button { background: #6b3cc9; }
         .chat-input button:hover { opacity: 0.9; }
+        .chat-input button:disabled { 
+            opacity: 0.5; 
+            cursor: not-allowed; 
+        }
 
-        /* Right Panel */
         .right-panel { 
             width: 250px; 
             background: rgba(255, 255, 255, 0.95); 
@@ -180,12 +204,24 @@
         body.dark .right-panel h3 { color: #e0e0e0; }
         .right-panel ul { list-style: none; }
         .right-panel ul li { 
-            padding: 5px 0; 
+            padding: 8px 12px; 
             color: #555; 
+            background: rgba(0,0,0,0.05);
+            border-radius: 5px;
+            margin-bottom: 5px;
         }
-        body.dark .right-panel ul li { color: #bbb; }
+        body.dark .right-panel ul li { 
+            color: #bbb; 
+            background: rgba(255,255,255,0.1);
+        }
+        .right-panel ul li.current-user {
+            background: #8a4af3;
+            color: white;
+        }
+        body.dark .right-panel ul li.current-user {
+            background: #6b3cc9;
+        }
 
-        /* Join Form */
         #joinForm { 
             display: none; 
             margin-top: 10px; 
@@ -209,11 +245,11 @@
         }
         body.dark #joinForm button { background: #d88c3b; }
 
-        /* Day/Night Toggle */
         .toggle-container { 
             position: fixed; 
             top: 20px; 
             right: 20px; 
+            z-index: 1000;
         }
         #themeToggle { 
             padding: 8px 16px; 
@@ -225,6 +261,30 @@
         }
         body.dark #themeToggle { background: #6b3cc9; }
         #themeToggle:hover { opacity: 0.9; }
+
+        .status { 
+            font-size: 12px; 
+            color: #666; 
+            margin-top: 10px; 
+        }
+        body.dark .status { color: #bbb; }
+        .status.connected { color: #4CAF50; }
+        .status.disconnected { color: #f44336; }
+
+        .setup-notice {
+            background: rgba(255, 243, 205, 0.9);
+            border: 1px solid #f0ad4e;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: #8a6d3b;
+        }
+        body.dark .setup-notice {
+            background: rgba(66, 56, 33, 0.9);
+            border-color: #d88c3b;
+            color: #f0ad4e;
+        }
     </style>
 </head>
 <body>
@@ -233,7 +293,10 @@
     </div>
     <div class="container">
         <div class="sidebar">
-            <h3>Welcome to Chat App</h3>
+            <h3>Real-time Chat App</h3>
+            <div class="setup-notice">
+                <strong>Setup Required:</strong> Please add your Supabase credentials in the JavaScript section below to enable real-time functionality.
+            </div>
             <input type="text" id="nickname" placeholder="Enter your nickname">
             <button id="createRoom">Create Room</button>
             <button id="joinRoom">Join Room</button>
@@ -241,114 +304,307 @@
                 <input type="text" id="roomCode" placeholder="Enter 8-digit room code">
                 <button id="join">Join</button>
             </div>
+            <div class="status" id="status">Disconnected</div>
         </div>
         <div class="main">
-            <div id="homepage"></div>
+            <div id="homepage">
+                <div>
+                    <h2>Welcome to Real-time Chat</h2>
+                    <p>Create or join a room to start chatting in real-time!</p>
+                </div>
+            </div>
             <div id="chatroom">
                 <div class="chat-header">
                     <h2>Room: <span id="roomCodeDisplay"></span></h2>
+                    <small>Share this URL: <span id="shareUrl"></span></small>
                 </div>
                 <div id="messages"></div>
                 <div class="chat-input">
-                    <input type="text" id="message" placeholder="Type a message">
+                    <input type="text" id="message" placeholder="Type a message..." maxlength="500">
                     <button id="send">Send</button>
                 </div>
             </div>
         </div>
         <div class="right-panel">
-            <h3>Users</h3>
+            <h3>Online Users (<span id="userCount">0</span>)</h3>
             <ul id="userList"></ul>
         </div>
     </div>
+
     <script>
-        const socket = io();
+        // 🔧 SETUP: Replace these with your Supabase credentials
+        const SUPABASE_URL = 'https://dnegtgasxcmupkbouxpv.supabase.co'; // e.g., 'https://your-project.supabase.co'
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRuZWd0Z2FzeGNtdXBrYm91eHB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg4MzI4OTMsImV4cCI6MjA2NDQwODg5M30.eUeWbjSfWVF1n5y--e7HII7sN5dLhIdb32WqPCCoBII';
+        
+        // Initialize Supabase client
+        let supabase = null;
+        let currentRoom = null;
+        let currentUser = null;
+        let messageSubscription = null;
+        let presenceSubscription = null;
+
+        // Check if Supabase is configured
+        if (SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY') {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            document.getElementById('status').textContent = 'Connected';
+            document.getElementById('status').className = 'status connected';
+        } else {
+            console.warn('Please configure Supabase credentials');
+            document.getElementById('status').textContent = 'Setup Required';
+            document.getElementById('status').className = 'status disconnected';
+        }
+
+        // Theme toggle
         const body = document.body;
         const themeToggle = document.getElementById('themeToggle');
-
-        // Day/Night Modeト mode toggle
+        
         themeToggle.addEventListener('click', () => {
             body.classList.toggle('dark');
             themeToggle.textContent = body.classList.contains('dark') ? 'Day Mode' : 'Night Mode';
+            localStorage.setItem('darkMode', body.classList.contains('dark'));
         });
 
-        // Create Room
+        if (localStorage.getItem('darkMode') === 'true') {
+            body.classList.add('dark');
+            themeToggle.textContent = 'Day Mode';
+        }
+
+        // Generate room code
+        function generateRoomCode() {
+            return Math.floor(10000000 + Math.random() * 90000000).toString();
+        }
+
+        // Add message to UI
+        function addMessage(nickname, message, isCurrentUser = false, timestamp = null) {
+            const messagesDiv = document.getElementById('messages');
+            const msg = document.createElement('div');
+            msg.className = isCurrentUser ? 'message' : 'other-message';
+            
+            const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+            msg.innerHTML = `<strong>${nickname}:</strong> ${message} ${timeStr ? `<small style="opacity: 0.7;">${timeStr}</small>` : ''}`;
+            
+            messagesDiv.appendChild(msg);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Add notification
+        function addNotification(text) {
+            const messagesDiv = document.getElementById('messages');
+            const msg = document.createElement('div');
+            msg.className = 'notification';
+            msg.textContent = text;
+            messagesDiv.appendChild(msg);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Update user list
+        function updateUserList(users) {
+            const userList = document.getElementById('userList');
+            const userCount = document.getElementById('userCount');
+            
+            userList.innerHTML = '';
+            userCount.textContent = users.length;
+            
+            users.forEach(user => {
+                const li = document.createElement('li');
+                li.textContent = user;
+                if (user === currentUser) {
+                    li.classList.add('current-user');
+                    li.textContent += ' (You)';
+                }
+                userList.appendChild(li);
+            });
+        }
+
+        // Send message
+        async function sendMessage() {
+            if (!supabase || !currentRoom || !currentUser) return;
+            
+            const messageInput = document.getElementById('message');
+            const message = messageInput.value.trim();
+            const sendButton = document.getElementById('send');
+            
+            if (!message) return;
+
+            sendButton.disabled = true;
+            
+            try {
+                const { error } = await supabase
+                    .from('messages')
+                    .insert([{
+                        room_code: currentRoom,
+                        nickname: currentUser,
+                        message: message,
+                        created_at: new Date().toISOString()
+                    }]);
+
+                if (error) throw error;
+                messageInput.value = '';
+            } catch (error) {
+                console.error('Error sending message:', error);
+                alert('Failed to send message');
+            } finally {
+                sendButton.disabled = false;
+            }
+        }
+
+        // Load existing messages
+        async function loadMessages(roomCode) {
+            if (!supabase) return;
+            
+            try {
+                const { data, error } = await supabase
+                    .from('messages')
+                    .select('*')
+                    .eq('room_code', roomCode)
+                    .order('created_at', { ascending: true })
+                    .limit(100);
+
+                if (error) throw error;
+
+                document.getElementById('messages').innerHTML = '';
+                data.forEach(msg => {
+                    addMessage(msg.nickname, msg.message, msg.nickname === currentUser, msg.created_at);
+                });
+            } catch (error) {
+                console.error('Error loading messages:', error);
+            }
+        }
+
+        // Subscribe to real-time messages
+        function subscribeToMessages(roomCode) {
+            if (!supabase || messageSubscription) return;
+
+            messageSubscription = supabase
+                .channel(`messages:${roomCode}`)
+                .on('postgres_changes', {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `room_code=eq.${roomCode}`
+                }, (payload) => {
+                    const msg = payload.new;
+                    if (msg.nickname !== currentUser) {
+                        addMessage(msg.nickname, msg.message, false, msg.created_at);
+                    }
+                })
+                .subscribe();
+        }
+
+        // Handle presence (users joining/leaving)
+        async function handlePresence(roomCode, nickname) {
+            if (!supabase) return;
+
+            const roomChannel = supabase.channel(`room:${roomCode}`, {
+                config: { presence: { key: nickname } }
+            });
+
+            await roomChannel.subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') {
+                    await roomChannel.track({ nickname, online_at: new Date().toISOString() });
+                }
+            });
+
+            roomChannel.on('presence', { event: 'sync' }, () => {
+                const state = roomChannel.presenceState();
+                const users = Object.keys(state).map(key => state[key][0].nickname);
+                updateUserList(users);
+            });
+
+            roomChannel.on('presence', { event: 'join' }, ({ key, newPresences }) => {
+                const nickname = newPresences[0].nickname;
+                if (nickname !== currentUser) {
+                    addNotification(`${nickname} joined the room`);
+                }
+            });
+
+            roomChannel.on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+                const nickname = leftPresences[0].nickname;
+                if (nickname !== currentUser) {
+                    addNotification(`${nickname} left the room`);
+                }
+            });
+
+            presenceSubscription = roomChannel;
+        }
+
+        // Enter chat room
+        async function enterRoom(roomCode, nickname) {
+            if (!supabase) {
+                alert('Supabase not configured. Please add your credentials.');
+                return;
+            }
+
+            currentRoom = roomCode;
+            currentUser = nickname;
+            
+            document.getElementById('homepage').style.display = 'none';
+            document.getElementById('chatroom').style.display = 'flex';
+            document.getElementById('roomCodeDisplay').textContent = roomCode;
+            
+            const newUrl = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+            window.history.pushState({}, '', newUrl);
+            document.getElementById('shareUrl').textContent = newUrl;
+            
+            await loadMessages(roomCode);
+            subscribeToMessages(roomCode);
+            await handlePresence(roomCode, nickname);
+        }
+
+        // Event listeners
         document.getElementById('createRoom').addEventListener('click', () => {
             const nickname = document.getElementById('nickname').value.trim();
-            if (nickname) socket.emit('create_room', { nickname });
-            else alert('Please enter a nickname');
+            if (nickname) {
+                const roomCode = generateRoomCode();
+                enterRoom(roomCode, nickname);
+            } else {
+                alert('Please enter a nickname');
+            }
         });
 
-        // Show join form
         document.getElementById('joinRoom').addEventListener('click', () => {
             document.getElementById('joinForm').style.display = 'block';
         });
 
-        // Join Room
         document.getElementById('join').addEventListener('click', () => {
             const nickname = document.getElementById('nickname').value.trim();
             const roomCode = document.getElementById('roomCode').value.trim();
-            if (nickname && roomCode) socket.emit('join_room', { nickname, room_code: roomCode });
-            else alert('Please enter nickname and room code');
-        });
-
-        // Enter chat room
-        function enterRoom(roomCode) {
-            document.getElementById('homepage').style.display = 'none';
-            document.getElementById('chatroom').style.display = 'flex';
-            document.getElementById('roomCodeDisplay').textContent = roomCode;
-        }
-
-        socket.on('room_created', (data) => enterRoom(data.room_code));
-        socket.on('room_joined', (data) => enterRoom(data.room_code));
-        socket.on('error', (data) => alert(data.message));
-
-        // Send message
-        document.getElementById('send').addEventListener('click', () => {
-            const message = document.getElementById('message').value.trim();
-            if (message) {
-                socket.emit('send_message', { message });
-                document.getElementById('message').value = '';
+            if (nickname && roomCode) {
+                if (roomCode.length === 8 && /^\d+$/.test(roomCode)) {
+                    enterRoom(roomCode, nickname);
+                } else {
+                    alert('Please enter a valid 8-digit room code');
+                }
+            } else {
+                alert('Please enter nickname and room code');
             }
         });
 
-        // Receive message
-        socket.on('new_message', (data) => {
-            const messagesDiv = document.getElementById('messages');
-            const msg = document.createElement('div');
-            msg.className = 'message';
-            msg.textContent = `${data.nickname}: ${data.message}`;
-            messagesDiv.appendChild(msg);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        document.getElementById('send').addEventListener('click', sendMessage);
+        document.getElementById('message').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
         });
 
-        // User join/leave notifications
-        socket.on('user_joined', (data) => {
-            const messagesDiv = document.getElementById('messages');
-            const msg = document.createElement('div');
-            msg.className = 'notification';
-            msg.textContent = `${data.nickname} has joined the room`;
-            messagesDiv.appendChild(msg);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        // Handle room from URL
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomFromUrl = urlParams.get('room');
+            if (roomFromUrl) {
+                document.getElementById('roomCode').value = roomFromUrl;
+                document.getElementById('joinForm').style.display = 'block';
+            }
         });
 
-        socket.on('user_left', (data) => {
-            const messagesDiv = document.getElementById('messages');
-            const msg = document.createElement('div');
-            msg.className = 'notification';
-            msg.textContent = `${data.nickname} has left the room`;
-            messagesDiv.appendChild(msg);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        });
-
-        // Update user list
-        socket.on('user_list', (data) => {
-            const userList = document.getElementById('userList');
-            userList.innerHTML = '';
-            data.users.forEach(user => {
-                const li = document.createElement('li');
-                li.textContent = user;
-                userList.appendChild(li);
-            });
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (messageSubscription) {
+                supabase.removeChannel(messageSubscription);
+            }
+            if (presenceSubscription) {
+                supabase.removeChannel(presenceSubscription);
+            }
         });
     </script>
 </body>
